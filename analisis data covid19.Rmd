@@ -1,0 +1,184 @@
+---
+title: "Analisis Data Menggunakan R"
+author: "Dwipa Prasetyo Priyoko"
+date: "22/01/2022"
+output: html_document
+---
+
+# COVID 19
+## Latar Belakang Dataset
+  Sejak akhir tahun 2019, seluruh dunia telah digemparkan dengan semakin meningkatnya wabah Corona Virus -19 (Covid-19). Penyakit ini tidak hanya membuat kepanikan, namun banyak memakan korban jiwa. Covid-19 saat ini menjadi trend pembicaraan, perdebatan, diskusi dan bahan berita di medis cetak ataupun medis elektronik. Saat ini trend Covid-19 selalu menjadi trend nomor satu dan trending topic di semua media social tanpa terkecuali.covid-19 pertama kali diidentifikasi di Wuhan, ibu kota provinsi Hubei, China.Virus ini telah menunjukkan bukti penularan dari manusia ke manusia. Tingkat penularan (rate of infection) tampaknya meningkat pada pertengahan Januari 2020. Per 30 Januari 2020, sekitar 8.243 kasus telah dikonfirmasi
+  
+## Pertanyaan Analisis
+  1. Bagaimana perbandingan antara kematian dengan sumbuh?
+  2. Bagaimana grafik terkonfirmasi covid-19 pada beberapa benua?
+
+## Exploratory Data Analysis (EDA)
+
+### Import Library
+```{r}
+library(heatmaply) #Untuk plot heatmap Missing Data
+library(visdat) #Untuk plot Missing Data
+library(reshape2) #Modifikasi DataFrame
+library(tidyr) #Modifikasi DataFrame
+library(ggplot2) #Plot
+library(psych) #Pair Plot
+library(DataExplorer) #Corelation Plot
+```
+### Mengakses Data
+```{r}
+df  <- read.csv("https://raw.githubusercontent.com/dwipaprasetyo/PSDS_Kelas_Dasar_3.0/main/country_wise_latest.csv", stringsAsFactors = T)
+df[df==""] <- NA
+df[0:5,]
+```
+### Dimensi Data
+```{r}
+dim(df)
+```
+Artinya kita memiliki data dengan 15 kolom dan 187 baris
+
+### Variabel Pada Dataset
+```{r}
+names(df)
+str(df)
+```
+Kita dapat mengetahui tipe-tipe data masing-masing variabel dan nama-nama variabel dalam dataset.
+### Mengecek Missing Data
+Missing data sangat mempengaruhi hasil analisis, pada nantinya akan kita isi atau hapus. Namun sebelumnya dicek keberadaanya terlebih dahulu dengan syntax berikut:
+```{r}
+sapply(df, function(x) sum(is.na(x)))
+```
+Untuk lebih memudahkan dalam membaca missing data, dapat ditampilkan dalam visualisasi berikut:
+```{r}
+heatmaply_na(
+  df[1:20,],
+  showticklabels = c(TRUE, FALSE)
+)
+```
+Hasil plot di atas berupa tampilan interaktif, yang mana bagian dengan warna hitam adalah bagian data yang hilang. Hasil plot di atas efektif untuk data dengan jumlah baris yang sedikit, untuk jumlah data yang banyak dapat digunakan sytax berikut:
+```{r}
+vis_miss(df)
+```
+Dari ketiga hasil di atas diketahui bahwa tidak ada kolom dengan missing data 
+### Mengecek Outlier
+Outlier adalah data yang berbeda dengan data lainnya. Nilai ini kadang menjadi nilai yang penting untuk diamati, namun kadang juga menjadi gangguan pada penerapan metode Machine Learning. Pada modul ini, nantinya nilai ini akan dihapus dengan pertimbangan tertentu. Kemudian, untuk melihat apakah ada outlier atau tidak dalam suatu dataset dapat dilihat melalui boxplot berikut:
+```{r}
+num_cols <- unlist(lapply(df, is.numeric)) #Memilih kolom bertipe numerik
+df_num <- df[ , num_cols]  
+boxplot(df_num)
+```
+### Melihat Korelasi Data
+```{r}
+plot_correlation(df_num)
+```
+### Melihat Statistik data
+```{r}
+summary(df)
+d <- melt(df_num)
+ggplot(d,aes(x = value)) + 
+    facet_wrap(~variable,scales = "free_x") + 
+    geom_histogram()
+```
+
+Plot ini untuk melihat apakah variabel-variabel pada dataset berdistribusi
+normal. 
+### Pair Plot
+```{r}
+pairs.panels(df_num, 
+             method = "pearson", # correlation method
+             hist.col = "#00AFBB",
+             density = TRUE,  # show density plots
+             ellipses = TRUE # show correlation ellipses
+             )
+```
+
+## Data Preprocessing
+Data preprocessing ini digunakan guna menyiapkan data untuk diklasifikasi menggunakan metode SVM(Hanya Contoh).
+
+Setelah mengetahui hasil EDA di atas maka untuk hasil yang baik diperlukan beberapa hal sebagai berikut:
+
+ 1. Menghapus kolom teks yang tidak diperlukan
+ 2. Mengisi NaN (jika ada data yang kosong)
+ 3. Melakukan pengkodean(Encoding)
+ 4. Menghapus outlier
+ 5. Karena nilai data ada yang sangat besar dan kecil maka perlu dilakukan normalisasi
+
+Setelah data diperbaiki dilakukan langkah sebagai berikut:
+
+ 1. Memilih variabel independent dan label
+ 2. Membagi data menjadi data training dan data testing
+
+[Note] * Ini hanya contoh untuk melakukan pengisian data NaN(Kosong), nama kabin mungkin menjadi penting sehingga tidak segampang itu diganti
+
+### Seleksi Kolom
+```{r}
+df = subset(df, select = -c(Country.Region) )
+head(df)
+```
+
+### Melakukan Encoding
+```{r}
+df$WHO.Region<- unclass(df$WHO.Region)
+df
+```
+
+### Menghapus Outlier
+```{r}
+#' Detect outliers using IQR method
+#' 
+#' @param x A numeric vector
+#' @param na.rm Whether to exclude NAs when computing quantiles
+#' 
+is_outlier <- function(x, na.rm = FALSE) {
+  qs = quantile(x, probs = c(0.25, 0.75), na.rm = na.rm)
+
+  lowerq <- qs[1]
+  upperq <- qs[2]
+  iqr = upperq - lowerq 
+
+  extreme.threshold.upper = (iqr * 3) + upperq
+  extreme.threshold.lower = lowerq - (iqr * 3)
+
+  # Return logical vector
+  x > extreme.threshold.upper | x < extreme.threshold.lower
+}
+
+#' Remove rows with outliers in given columns
+#' 
+#' Any row with at least 1 outlier will be removed
+#' 
+#' @param df A data.frame
+#' @param cols Names of the columns of interest. Defaults to all columns.
+#' 
+#' 
+remove_outliers <- function(df, cols = names(df)) {
+  for (col in cols) {
+    cat("Removing outliers in column: ", col, " \n")
+    df <- df[!is_outlier(df[[col]]),]
+  }
+  df
+}
+
+
+vars_of_interest <- c("Country.Region", "Confirmed", "Deaths", "Recovered","Active","New.cases","New.deaths","New.recovered","Deaths...100.Cases","Recovered...100.Cases","Deaths...100.Recovered","Confirmed.last.week","X1.week.change","X1.week...increase","WHO.Region")
+
+df_filtered <- remove_outliers(df, vars_of_interest)
+```
+
+### Normalisasi Data
+```{r}
+unit_length <- function(x) {
+                            x / sqrt(sum(x^2))
+                            }
+unit_length_df <- as.data.frame(lapply(df, unit_length))
+
+head(unit_length_df)
+```
+
+### Memilih Variabel Target dan Variabel Independent
+```{r}
+y=df$WHO.Region
+x=data.matrix(df[-c(14)])
+y
+x
+```
